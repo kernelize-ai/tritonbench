@@ -4,6 +4,9 @@ on blackwell with/without warpspec.
 """
 
 import os
+import functools
+import logging
+import os
 from typing import Optional
 
 import torch
@@ -136,6 +139,8 @@ def matmul_kernel_tma(
     DTYPE: tl.constexpr,
     TRANSPOSE_A: tl.constexpr,
     TRANSPOSE_B: tl.constexpr,
+    DTYPE: tl.constexpr,
+    IS_TRANSPOSE: tl.constexpr,
 ):
     dtype = DTYPE
 
@@ -171,12 +176,30 @@ def matmul_kernel_tma(
             b = b_desc.load([offs_k, offs_bn])
             arg2 = b
         accumulator = tl.dot(arg1, arg2, accumulator)
+        a = a_desc.load([offs_am, offs_k])
+        b = b_desc.load([offs_bn, offs_k])
+        if IS_TRANSPOSE:
+            arg2 = b
+        else:
+            arg2 = b.T
+        accumulator = tl.dot(a, arg2, accumulator)
 
     c = accumulator.to(dtype)
 
     offs_cm = pid_m * BLOCK_SIZE_M
     offs_cn = pid_n * BLOCK_SIZE_N
     c_desc.store([offs_cm, offs_cn], c)
+
+
+@functools.lru_cache
+def warn_once(msg: str):
+    """
+    Wrapper around logging.warning to try minimize the number of warnings when
+    a function is repeatedly called.
+    """
+    logging.warning(
+        "Incompatible dimensions, B is transposed. We are transposing B which may impact results"
+    )
 
 
 def blackwell_matmul_tma(a, b, warp_specialize: bool):
@@ -295,6 +318,8 @@ def matmul_kernel_tma_persistent(
     DTYPE: tl.constexpr,
     TRANSPOSE_A: tl.constexpr,
     TRANSPOSE_B: tl.constexpr,
+    DTYPE: tl.constexpr,
+    IS_TRANSPOSE: tl.constexpr,
 ):
     dtype = DTYPE
     start_pid = tl.program_id(axis=0)
@@ -334,6 +359,13 @@ def matmul_kernel_tma_persistent(
                 b = b_desc.load([offs_k, offs_bn])
                 arg2 = b
             accumulator = tl.dot(arg1, arg2, accumulator)
+            a = a_desc.load([offs_am, offs_k])
+            b = b_desc.load([offs_bn, offs_k])
+            if IS_TRANSPOSE:
+                arg2 = b
+            else:
+                arg2 = b.T
+            accumulator = tl.dot(a, arg2, accumulator)
 
         tile_id_c += NUM_SMS
         pid_m, pid_n = _compute_pid(
@@ -374,6 +406,9 @@ def blackwell_matmul_tma_persistent(a, b, warp_specialize: bool):
         a.shape[1] == b.shape[1] and b.stride()[-1] == 1
     )
     assert a.dtype == b.dtype, "Incompatible dtypes"
+
+    check_tma_alignment(a.stride(), (torch.finfo(a.dtype).bits + 7) // 8)
+    check_tma_alignment(b.stride(), (torch.finfo(b.dtype).bits + 7) // 8)
 
     M, K = a.shape
     if a.shape[1] != b.shape[1]:
@@ -540,6 +575,17 @@ def matmul_kernel_descriptor_persistent(
                 arg2 = b.T
             else:
                 b = b_desc.load([offs_k, offs_bn])
+                arg2 = b
+            accumulator = tl.dot(arg1, arg2, accumulator)
+            a = a_desc.load([offs_am, offs_k])
+            b = b_desc.load([offs_bn, offs_k])
+            if TRANSPOSE_A:
+                arg1 = a.T
+            else:
+                arg1 = a
+            if TRANSPOSE_B:
+                arg2 = b.T
+            else:
                 arg2 = b
             accumulator = tl.dot(arg1, arg2, accumulator)
 
