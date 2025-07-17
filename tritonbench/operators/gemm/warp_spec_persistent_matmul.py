@@ -8,7 +8,14 @@ from typing import Optional
 import torch
 import triton
 import triton.language as tl
-from triton.tools.tensor_descriptor import TensorDescriptor
+
+# Conditional import for TensorDescriptor - only available in newer Triton versions
+try:
+    from triton.tools.tensor_descriptor import TensorDescriptor
+    HAS_TENSOR_DESCRIPTOR = True
+except ModuleNotFoundError:
+    TensorDescriptor = None
+    HAS_TENSOR_DESCRIPTOR = False
 
 # TODO: Add proton support
 
@@ -113,6 +120,9 @@ def matmul_kernel_tma(
 
 
 def blackwell_matmul_tma(a, b, warp_specialize: bool):
+    if not HAS_TENSOR_DESCRIPTOR:
+        raise RuntimeError("TensorDescriptor not available in this Triton version. Please upgrade to Triton 3.3.4+")
+    
     # Check constraints.
     assert a.shape[1] == b.shape[1], "Incompatible dimensions"  # b is transposed
     assert a.dtype == b.dtype, "Incompatible dtypes"
@@ -255,6 +265,9 @@ def matmul_kernel_tma_persistent(
 
 
 def blackwell_matmul_tma_persistent(a, b, warp_specialize: bool):
+    if not HAS_TENSOR_DESCRIPTOR:
+        raise RuntimeError("TensorDescriptor not available in this Triton version. Please upgrade to Triton 3.3.4+")
+    
     # Check constraints.
     assert a.shape[1] == b.shape[1], "Incompatible dimensions"  # b is transposed
     assert a.dtype == b.dtype, "Incompatible dtypes"
