@@ -158,17 +158,17 @@ class Operator(BenchmarkOperator):
         return flops
 
     @register_metric()
-    def op_tflops(
+    def op_gflops(
         self, fn_name: str, example_inputs: Any, metrics: BenchmarkOperatorMetrics
     ) -> float:
-        """Report the raw number of TFLOPS (not TFLOPS/sec) for the addmm operation."""
+        """Report the raw number of GFLOPS (not GFLOPS/sec) for the addmm operation."""
         _, mat1, mat2 = example_inputs
         m, k = mat1.size()
         k, n = mat2.size()
         flops = (2 * m * k * n) + (m * n)
-        # Convert FLOPS to TFLOPS (divide by 10^12)
-        tflops = flops / 1e12
-        return tflops
+        # Convert FLOPS to GFLOPS (divide by 10^9)
+        gflops = flops / 1e9
+        return gflops
 
     @register_metric()
     def op_gbytes(
