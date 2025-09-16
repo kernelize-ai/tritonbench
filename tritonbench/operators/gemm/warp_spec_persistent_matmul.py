@@ -11,12 +11,12 @@ import triton
 import triton.language as tl
 
 # Conditional import for TensorDescriptor - only available in newer Triton versions
+TENSOR_DESCRIPTOR_IS_SUPPORTED = True
 try:
     from triton.tools.tensor_descriptor import TensorDescriptor
-    HAS_TENSOR_DESCRIPTOR = True
 except ModuleNotFoundError:
     TensorDescriptor = None
-    HAS_TENSOR_DESCRIPTOR = False
+    TENSOR_DESCRIPTOR_IS_SUPPORTED = False
 
 # TODO: Add proton support
 
